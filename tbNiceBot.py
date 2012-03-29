@@ -175,7 +175,7 @@ class Admin(object):
 			# POST
 			curl.setopt(pycurl.POST, 1)
 			post_params = [
-				('username', username),
+				('username', username.decode('utf8').encode('gbk')),
 				('password', password),
 				('mem_pass', 'on'),
 				('tpl', 'tb'),
