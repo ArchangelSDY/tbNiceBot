@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>tbNiceBot</title>
+</head>
+<body>
+	<h1>tbNiceBot</h1>
+	<hr>
+	<h2>Instruction</h2>
+		<ul>
+			<li><b>DO NOT LEAK THIS URL!</b></li>
+			<li>This list will apply to <b>ALL</b> bots.</li>
+			<li>Format is in regular expression. Consult <a href="http://deerchao.net/tutorials/regex/regex.htm">this</a> for details. Write expressions as <b>STRICT</b> as possible.</li>
+		</ul>
+	<h2>Filter List</h2>
+	<table>
+		<tbody>
+			{% for filter in filter_list %}
+				<tr>
+					<td>{{ escape(filter["regex"]) }}</td>
+					<td><a href="delete/{{ filter["id"]  }}">Delete</a></td>
+				</tr>
+			{% end %}
+		</tbody>
+	</table>
+	<h2>Add Filter</h2>
+	<form method="POST" action="add">
+			<input type="text" name="new_filter" />
+			<input type="submit" value="Submit" />
+	</form>
+	<hr>
+	<p>By Archangel.SDY#AT#gmail.com</p>
+</body>
+</html>

@@ -23,36 +23,49 @@ import re
 import StringIO
 import traceback
 import urllib
+import cPickle
 
 import pycurl
 
-# Filtered titles. Format in regex.
-# FILTERS = [u'^███.*$']
-FILTERS = []
+# Monitor info
+MONITOR_INFOS = [{
+	'board_url': r'',
+	'login_username': r'',
+	'login_password': r'',
+}, {
+	'board_url': r'',
+	'login_username': r'',
+	'login_password': r'',
+}]
 
-# Monitored board url
-MONITORED_BOARD_URL = ''
-
-# Login info
-LOGIN_USERNAME = r''
-LOGIN_PASSWORD = r''
-LOGIN_POINT = r'https://passport.baidu.com/?login'
+# For the below paths, absolute path may be better when used as a cron task.
+# Filters file path
+FILTERS_FILE = r'filters'
 
 # Log path
 LOG_PATH = r'tbNiceBot.log'
 
+# No need to change settings below.
 # Site info
 SITE_DOMAIN = r'http://tieba.baidu.com'
 TOPIC_DELETE_POINT = r'http://tieba.baidu.com/f/commit/thread/delete'
+LOGIN_POINT = r'https://passport.baidu.com/?login'
 
 # User agent
 USER_AGENT = r'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20100101 Firefox/12.0'
+
+
+FILTERS = []
 
 def log(info):
 	with open(LOG_PATH, 'a+') as log_file:
 		# print info
 		time = datetime.datetime.now()
 		log_file.write('%s: %s\n' % (time, info.encode('utf8')))
+
+def read_filters():
+	with open(FILTERS_FILE, "rb") as filters_file:
+		return cPickle.load(filters_file)
 
 def get_html(url, cookie_file=None):
 	try:
@@ -144,7 +157,8 @@ def is_title_match(title):
 		if title_regex.match(title) is not None:
 			return True
 		else:
-			return False
+			continue
+	return False
 
 class Admin(object):
 	"""Admin operations."""
@@ -158,7 +172,7 @@ class Admin(object):
 		super(Admin, self).__init__()
 
 	@classmethod
-	def login(self, username=LOGIN_USERNAME, password=LOGIN_PASSWORD, board_url=MONITORED_BOARD_URL):
+	def login(self, username, password, board_url):
 		try:
 			curl = pycurl.Curl()
 			curl.setopt(pycurl.URL, LOGIN_POINT)
@@ -279,20 +293,38 @@ class Admin(object):
 			os.unlink(Admin.COOKIE_PATH)
 
 def main():
-	topic_list = get_topic_list(MONITORED_BOARD_URL)
-	topic_to_delete = []
-	for topic in topic_list:
-		if is_title_match(topic['title']):
-			topic_to_delete.append(topic)
-			log('Spam <%s> detected.' % topic['title'])
+	# Read filters list
+	global FILTERS
+	# Comment this line below if you do not want to use the web admin. Hard code filter expressions in 'FILTERS' instead.
+	FILTERS = read_filters()
 
-	if len(topic_to_delete) > 0:
-		admin = Admin.login(LOGIN_USERNAME, LOGIN_PASSWORD, MONITORED_BOARD_URL)
-		if admin is not None:
-			for topic in topic_to_delete:
-				full_href = SITE_DOMAIN + topic['href']
-				admin.delete_topic(full_href)
-			admin.clean()
+	for monitor_info in MONITOR_INFOS:
+		try:
+			# Get topic list
+			topic_list = get_topic_list(monitor_info['board_url'])
+
+			# Get spam topics
+			topic_to_delete = []
+			for topic in topic_list:
+				if is_title_match(topic['title']):
+					topic_to_delete.append(topic)
+					log('Spam <%s> detected.' % topic['title'])
+
+			# Delete spam topics
+			if len(topic_to_delete) > 0:
+				admin = Admin.login(
+					monitor_info['login_username'], 
+					monitor_info['login_password'], 
+					monitor_info['board_url']
+				)
+				if admin is not None:
+					for topic in topic_to_delete:
+						full_href = SITE_DOMAIN + topic['href']
+						admin.delete_topic(full_href)
+					admin.clean()
+		except Exception, e:
+			log(unicode(traceback.format_exc()))
+			continue
 
 if __name__ == '__main__':
 	main()

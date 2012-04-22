@@ -18,13 +18,23 @@
 
 import unittest
 import os
+import cPickle
 
 import tbNiceBot
 
 class TestTbBot(unittest.TestCase):
 	def setUp(self):
+		# Remove cookie file
 		if os.path.exists(tbNiceBot.Admin.COOKIE_PATH):
 			os.unlink(tbNiceBot.Admin.COOKIE_PATH)
+
+		# Make filters file
+		with open('filters', 'w') as filters_file:
+			cPickle.dump(['^1$', '^123$'], filters_file)
+
+	def test_read_filters(self):
+		filters = tbNiceBot.read_filters()
+		self.assertEqual(len(filters), 2)
 
 	def test_get_html(self):
 		url = 'http://tieba.baidu.com/f?kw=%D2%B9%C3%F7%C7%B0%B5%C4%C1%F0%C1%A7%C9%AB'
@@ -37,10 +47,11 @@ class TestTbBot(unittest.TestCase):
 		self.assertIsNotNone(topic_list)
 
 	def test_admin_login(self):
-		admin = tbNiceBot.Admin.login()
-		with open(tbNiceBot.Admin.COOKIE_PATH, 'r') as cookie_file:
-			cookie = cookie_file.read()
-			self.assertNotEqual(cookie.find('BDUSS'), -1)
+		for monitor_info in tbNiceBot.MONITOR_INFOS:
+			admin = tbNiceBot.Admin.login(monitor_info['login_username'], monitor_info['login_password'], monitor_info['board_url'])
+			with open(tbNiceBot.Admin.COOKIE_PATH, 'r') as cookie_file:
+				cookie = cookie_file.read()
+				self.assertNotEqual(cookie.find('BDUSS'), -1)
 
 	def tearDown(self):
 		if os.path.exists(tbNiceBot.Admin.COOKIE_PATH):
