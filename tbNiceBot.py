@@ -23,24 +23,13 @@ import re
 import StringIO
 import traceback
 import urllib
-import cPickle
+import json
 
 import pycurl
 
-# Monitor info
-MONITOR_INFOS = [{
-	'board_url': r'',
-	'login_username': r'',
-	'login_password': r'',
-}, {
-	'board_url': r'',
-	'login_username': r'',
-	'login_password': r'',
-}]
-
 # For the below paths, absolute path may be better when used as a cron task.
-# Filters file path
-FILTERS_FILE = r'filters'
+# Config file path
+CONFIG_PATH = r'config'
 
 # Log path
 LOG_PATH = r'tbNiceBot.log'
@@ -54,18 +43,19 @@ LOGIN_POINT = r'https://passport.baidu.com/?login'
 # User agent
 USER_AGENT = r'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20100101 Firefox/12.0'
 
-
-FILTERS = []
+# Keep global config
+CONFIG = {}
 
 def log(info):
 	with open(LOG_PATH, 'a+') as log_file:
-		# print info
+		print info
 		time = datetime.datetime.now()
 		log_file.write('%s: %s\n' % (time, info.encode('utf8')))
 
-def read_filters():
-	with open(FILTERS_FILE, "rb") as filters_file:
-		return cPickle.load(filters_file)
+def load_config(path):
+	with open(path, 'r') as config_file:
+		global CONFIG
+		CONFIG = json.load(config_file)
 
 def get_html(url, cookie_file=None):
 	try:
@@ -152,7 +142,7 @@ def get_topic_list(board_url):
 		return None
 
 def is_title_match(title):
-	for filter in FILTERS:
+	for filter in CONFIG['filters']:
 		title_regex = re.compile(filter)
 		if title_regex.match(title) is not None:
 			return True
@@ -189,7 +179,7 @@ class Admin(object):
 			# POST
 			curl.setopt(pycurl.POST, 1)
 			post_params = [
-				('username', username.decode('utf8').encode('gbk')),
+				('username', username.encode('gbk')),
 				('password', password),
 				('tpl', 'tb'),
 			]
@@ -292,12 +282,10 @@ class Admin(object):
 			os.unlink(Admin.COOKIE_PATH)
 
 def main():
-	# Read filters list
-	global FILTERS
-	# Comment this line below if you do not want to use the web admin. Hard code filter expressions in 'FILTERS' instead.
-	FILTERS = read_filters()
+	# Load config
+	load_config(CONFIG_PATH)
 
-	for monitor_info in MONITOR_INFOS:
+	for monitor_info in CONFIG['monitor_infos']:
 		try:
 			# Get topic list
 			topic_list = get_topic_list(monitor_info['board_url'])
@@ -308,6 +296,8 @@ def main():
 				if is_title_match(topic['title']):
 					topic_to_delete.append(topic)
 					log('Spam <%s> detected.' % topic['title'])
+
+			return
 
 			# Delete spam topics
 			if len(topic_to_delete) > 0:
