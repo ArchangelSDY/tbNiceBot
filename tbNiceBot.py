@@ -17,22 +17,22 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import datetime
-from HTMLParser import HTMLParser
 import os
 import re
 import StringIO
 import traceback
 import urllib
-import json
+from HTMLParser import HTMLParser
+from operator import itemgetter
 
 import pycurl
+
+from account import Admin
+from utility import load_config, save_config, log, get_html
 
 # For the below paths, absolute path may be better when used as a cron task.
 # Config file path
 CONFIG_PATH = r'config'
-
-# Log path
-LOG_PATH = r'tbNiceBot.log'
 
 # No need to change settings below.
 # Site info
@@ -46,50 +46,6 @@ USER_AGENT = r'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:12.0) Gecko/20100101 Firef
 # Keep global config
 CONFIG = {}
 
-def log(info):
-	with open(LOG_PATH, 'a+') as log_file:
-		print info
-		time = datetime.datetime.now()
-		log_file.write('%s: %s\n' % (time, info.encode('utf8')))
-
-def load_config(path):
-	with open(path, 'r') as config_file:
-		global CONFIG
-		CONFIG = json.load(config_file)
-
-def get_html(url, cookie_file=None):
-	try:
-		curl = pycurl.Curl()
-		curl.setopt(pycurl.URL, str(url))
-
-		# Ignore SSL.
-		curl.setopt(pycurl.SSL_VERIFYPEER, False)
-
-		# Follow redirection.
-		curl.setopt(pycurl.FOLLOWLOCATION, True)
-
-		# Set user agent
-		curl.setopt(pycurl.USERAGENT, USER_AGENT)
-
-		# Set cookie file
-		if cookie_file is not None and os.path.exists(cookie_file):
-			curl.setopt(pycurl.COOKIEFILE, cookie_file)
-
-		# Set content buffer
-		content = StringIO.StringIO()
-		curl.setopt(pycurl.WRITEFUNCTION, content.write)
-
-		curl.perform()
-
-		code = curl.getinfo(pycurl.HTTP_CODE)
-		if int(code) == 200:
-			return content.getvalue().decode('gbk')
-		else:
-			return None
-	except Exception, e:
-		log(unicode(traceback.format_exc()))
-		return None
-
 class TopicParser(HTMLParser):
 	"""Parse topics from page source"""
 	def __init__(self):
@@ -97,7 +53,11 @@ class TopicParser(HTMLParser):
 		self._in_topic_td = False
 		self._in_topic_anchor = False
 		self._topic_list = []
-		self._current_topic = {}
+		self._current_topic = {
+			'title': None,
+			'url': None,
+			'id': None
+		}
 
 	def handle_starttag(self, tag, attrs):
 		if tag == 'td' and ('class', 'thread_title') in attrs:
@@ -106,7 +66,11 @@ class TopicParser(HTMLParser):
 			self._in_topic_anchor = True
 			for attr in attrs:
 				if attr[0] == 'href':
-					self._current_topic['href'] = attr[1]
+					self._current_topic['url'] = SITE_DOMAIN + attr[1]
+					self._current_topic['id'] = int(re.search(
+						'^.*\/(\d+)$', 
+						self._current_topic['url']
+					).groups()[0])
 					break
 
 	def handle_data(self, data):
@@ -150,154 +114,96 @@ def is_title_match(title):
 			continue
 	return False
 
-class Admin(object):
-	"""Admin operations."""
-
-	COOKIE_PATH = 'cookie.txt'
-
-	def __call__(self):
-		raise TypeError('Use login() to create an admin instance')
-
+class TopicContentParser(HTMLParser):
+	"""Parse topic content from page source"""
 	def __init__(self):
-		super(Admin, self).__init__()
+		HTMLParser.__init__(self)
+		self._in_content_paragraph = False
+		self._is_first_floor = True
+		self._topic_content = ''
 
-	@classmethod
-	def login(self, username, password, board_url):
+	def handle_starttag(self, tag, attrs):
+		if tag == 'p' and ('class', 'd_post_content') in attrs and self._is_first_floor == True:
+			self._in_content_paragraph = True
+
+	def handle_data(self, data):
+		if self._in_content_paragraph:
+			self._topic_content = ' '.join([self._topic_content, data])
+
+	def handle_endtag(self, tag):
+		if tag == 'p' and self._in_content_paragraph:
+			self._in_content_paragraph = False
+			self._is_first_floor = False
+
+	def feed(self, data):
 		try:
-			curl = pycurl.Curl()
-			curl.setopt(pycurl.URL, LOGIN_POINT)
-
-			# Ignore SSL.
-			curl.setopt(pycurl.SSL_VERIFYPEER, False)
-
-			# Follow redirection.
-			curl.setopt(pycurl.FOLLOWLOCATION, True)
-
-			# Set user agent
-			curl.setopt(pycurl.USERAGENT, USER_AGENT)
-
-			# POST
-			curl.setopt(pycurl.POST, 1)
-			post_params = [
-				('username', username.encode('gbk')),
-				('password', password),
-				('tpl', 'tb'),
-			]
-			curl.setopt(pycurl.POSTFIELDS, urllib.urlencode(post_params))
-
-			# Set cookie jar
-			curl.setopt(pycurl.COOKIEJAR, Admin.COOKIE_PATH)
-
-			# Set content buffer
-			content = StringIO.StringIO()
-			curl.setopt(pycurl.WRITEFUNCTION, content.write)
-
-			# Set header buffer
-			header = StringIO.StringIO()
-			curl.setopt(pycurl.HEADERFUNCTION, header.write)
-
-			curl.perform()
-
-			# Visit board page to get related cookies
-			curl.setopt(pycurl.URL, board_url)
-			curl.perform()
-
-			return Admin()
+			HTMLParser.feed(self, data)
+			return self._topic_content
 		except Exception, e:
 			log(unicode(traceback.format_exc()))
 			return None
 
-	def delete_topic(self, topic_url):
-		try:
-			page_source = get_html(topic_url, Admin.COOKIE_PATH).encode('utf8')
+def get_topic_content(topic_url):
+	page_source = get_html(topic_url.decode('utf8'))
 
-			tbs = re.search('tbs\:\"(.+)\"', page_source).groups()[0]
+	# Hack quotation marks
+	page_source = page_source.replace('&quot;', '\"')
 
-			kw = re.search('forum_name\:\"(.+?)\"', page_source).groups()[0]
+	if page_source is not None:
+		topic_content_parser = TopicContentParser()
+		return topic_content_parser.feed(page_source)
+	else:
+		return None
 
-			fid = re.search('fid\:\'(.+?)\'', page_source).groups()[0]
+def is_topic_content_match(topic_url):
+	log(unicode('Fetching %s' % topic_url))
 
-			tid = re.search('tid\:\'(.+?)\'', page_source).groups()[0]
+	topic_content = get_topic_content(topic_url)
 
-			post_params = [
-				('ie', 'utf-8'),
-				('tbs', tbs),
-				('kw', kw),
-				('fid', fid),
-				('tid', tid),
-			]
+	if topic_content is not None:
+		for filter in CONFIG['filters']:
+			topic_content_regex = re.compile(filter)
+			if topic_content_regex.match(topic_content) is not None:
+				return True
+			else:
+				continue
+		return False
+	else:
+		return False
 
-			curl = pycurl.Curl()
-			curl.setopt(pycurl.URL, TOPIC_DELETE_POINT)
+def get_new_topic_list(topic_list):
+	sorted_topic_list = sorted(topic_list, key=itemgetter('id'))
+	new_topic_list = []
 
-			# Set referer
-			curl.setopt(pycurl.REFERER, str(topic_url))
+	for topic_index in range(0, len(sorted_topic_list)):
+		topic_id = sorted_topic_list[topic_index]['id']
+		if  topic_id > CONFIG['latest_topic_id']:
+			new_topic_list.append(sorted_topic_list[topic_index])
+			CONFIG['latest_topic_id'] = topic_id
 
-			# Ignore SSL.
-			curl.setopt(pycurl.SSL_VERIFYPEER, False)
+	save_config(CONFIG, CONFIG_PATH)
 
-			# Follow redirection.
-			curl.setopt(pycurl.FOLLOWLOCATION, True)
-
-			# Set user agent
-			curl.setopt(pycurl.USERAGENT, USER_AGENT)
-
-			# POST
-			curl.setopt(pycurl.POST, 1)
-			curl.setopt(pycurl.POSTFIELDS, urllib.urlencode(post_params))
-
-			# Set custom header
-			custom_header = [
-				'X-Requested-With: XMLHttpRequest',
-				'DNT: 1',
-				'Accept:  application/json, text/javascript, */*; q=0.01',
-    			'Accept-Language:  en-us,en;q=0.5',
-    			'Accept-Encoding:  gzip, deflate',
-    			'Pragma:  no-cache',
-    			'Cache-Control:  no-cache',
-    			'HeaderEnd: CRLF',
-    			'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
-			]
-			curl.setopt(pycurl.HTTPHEADER, custom_header)
-
-			# Set cookie file
-			curl.setopt(pycurl.COOKIEFILE , Admin.COOKIE_PATH)
-
-			# Set content buffer
-			content = StringIO.StringIO()
-			curl.setopt(pycurl.WRITEFUNCTION, content.write)
-
-			# Set header buffer
-			header = StringIO.StringIO()
-			curl.setopt(pycurl.HEADERFUNCTION, header.write)
-
-			curl.perform()
-
-		except Exception, e:
-			log(unicode(traceback.format_exc()))
-			return
-
-	def clean(self):
-		if os.path.exists(Admin.COOKIE_PATH):
-			os.unlink(Admin.COOKIE_PATH)
+	return new_topic_list
 
 def main():
 	# Load config
-	load_config(CONFIG_PATH)
+	global CONFIG
+	CONFIG = load_config(CONFIG_PATH)
 
 	for monitor_info in CONFIG['monitor_infos']:
 		try:
 			# Get topic list
 			topic_list = get_topic_list(monitor_info['board_url'])
 
+			# Get new topic list
+			new_topic_list = get_new_topic_list(topic_list)
+
 			# Get spam topics
 			topic_to_delete = []
-			for topic in topic_list:
-				if is_title_match(topic['title']):
+			for topic in new_topic_list:
+				if is_title_match(topic['title']) or is_topic_content_match(topic['url']):
 					topic_to_delete.append(topic)
 					log('Spam <%s> detected.' % topic['title'])
-
-			return
 
 			# Delete spam topics
 			if len(topic_to_delete) > 0:
@@ -308,8 +214,7 @@ def main():
 				)
 				if admin is not None:
 					for topic in topic_to_delete:
-						full_href = SITE_DOMAIN + topic['href']
-						admin.delete_topic(full_href)
+						admin.delete_topic(topic['url'])
 					admin.clean()
 		except Exception, e:
 			log(unicode(traceback.format_exc()))

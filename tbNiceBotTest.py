@@ -38,8 +38,10 @@ class TestTbBot(unittest.TestCase):
 					'login_password': r'',
 				}], 
 				'filters': [
-					r'^◆◇$'
+					r'^◆◇$',
+					r'.*卡迪琳娜学院.*',
 				],
+				'latest_topic_id': 1539493399,
 			}
 			json.dump(config_data, config_test_file)
 
@@ -56,6 +58,17 @@ class TestTbBot(unittest.TestCase):
 		board_url = 'http://tieba.baidu.com/f?kw=%D2%B9%C3%F7%C7%B0%B5%C4%C1%F0%C1%A7%C9%AB'
 		topic_list = tbNiceBot.get_topic_list(board_url)
 		self.assertIsNotNone(topic_list)
+
+	def test_get_topic_content(self):
+		topic_url = 'http://tieba.baidu.com/p/1549379482'
+		topic_content = tbNiceBot.get_topic_content(topic_url)
+		self.assertIsNotNone(topic_content)
+		print topic_content
+
+	def test_is_topic_content_match(self):
+		tbNiceBot.load_config('config_test')
+		board_url = 'http://tieba.baidu.com/p/1549379482'
+		self.assertEqual(tbNiceBot.is_topic_content_match(board_url), True)
 
 	def test_admin_login(self):
 		tbNiceBot.load_config('config_test')
