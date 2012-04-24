@@ -1,12 +1,9 @@
 {
-	"monitor_infos": [
-		{
-			"login_username": "",
-			"login_password": "",
-			"board_url": ""
-		}
-	], 
 	"filters": [
+		"", 
 		""
-	]
+	],
+	"latest_topic_id": {
+		"": 0
+	}
 }
