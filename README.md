@@ -8,6 +8,6 @@ Filter settings are managed in 2 ways:
 
    A web admin server based on Tornado is included in the folder "web_admin". To run it up, install Tornado first.
 
-2. Hard code
+2. Edit the "config" file manually
 
-   In simple cases, filter expressions can be hard coded in "tbNiceBot.py". Comment the line reading filters in "tbNiceBot.main()".
+   In simple cases, you can edit the "filters" in the file "config" manually.
