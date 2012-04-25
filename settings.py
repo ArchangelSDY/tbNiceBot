@@ -22,11 +22,6 @@ MONITOR_INFOS = [
 		'login_username': r'',
 		'login_password': r'',
 		'board_url': r''
-	},
-	{
-		'login_username': r'',
-		'login_password': r'',
-		'board_url': r''
 	}
 ]
 

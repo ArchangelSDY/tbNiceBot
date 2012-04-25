@@ -42,6 +42,8 @@ def save_config(path=CONFIG_PATH):
 
 class ListHandler(tornado.web.RequestHandler):
 	def get(self):
+		load_config()
+
 		filter_list = []
 		for filter in CONFIG["filters"]:
 			filter_list.append({
@@ -52,20 +54,24 @@ class ListHandler(tornado.web.RequestHandler):
 
 class AddHandler(tornado.web.RequestHandler):
 	def post(self):
+		load_config()
+
 		new_filter = self.get_argument("new_filter")
 		if len(new_filter) <= FILTER_LEN_LIMIT:
 			CONFIG["filters"].append(new_filter)
-			print "add", new_filter
+			# print "add", new_filter
 			save_config()
 		self.redirect("/")
 		
 class DeleteHandler(tornado.web.RequestHandler):
 	def get(self, filter_id):
+		load_config()
+
 		if filter_id.isdigit():
 			filter_id = int(filter_id)
 			if filter_id >= 0 and filter_id < len(CONFIG["filters"]):
 				deleted_filter = CONFIG["filters"].pop(int(filter_id))
-				print "delete", deleted_filter 
+				# print "delete", deleted_filter 
 				save_config()
 		self.redirect("/")
 		

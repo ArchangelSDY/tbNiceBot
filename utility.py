@@ -18,6 +18,7 @@
 
 import datetime
 import json
+import os
 import StringIO
 import traceback
 
@@ -35,7 +36,7 @@ def save_config(config=settings.CONFIG, path=settings.CONFIG_PATH):
 
 def log(info):
 	with open(settings.LOG_PATH, 'a+') as log_file:
-		print info
+		# print info
 		time = datetime.datetime.now()
 		log_file.write('%s: %s\n' % (time, info.encode('utf8')))
 

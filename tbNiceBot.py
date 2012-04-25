@@ -37,9 +37,9 @@ class TopicParser(HTMLParser):
 		self._in_topic_anchor = False
 		self._topic_list = []
 		self._current_topic = {
-			'title': None,
-			'url': None,
-			'id': None
+			'title': '',
+			'url': '',
+			'post_id': None
 		}
 
 	def handle_starttag(self, tag, attrs):
@@ -50,7 +50,7 @@ class TopicParser(HTMLParser):
 			for attr in attrs:
 				if attr[0] == 'href':
 					self._current_topic['url'] = settings.SITE_DOMAIN + attr[1]
-					self._current_topic['id'] = int(re.search(
+					self._current_topic['post_id'] = int(re.search(
 						'^.*\/(\d+)$', 
 						self._current_topic['url']
 					).groups()[0])
@@ -58,13 +58,17 @@ class TopicParser(HTMLParser):
 
 	def handle_data(self, data):
 		if self._in_topic_td and self._in_topic_anchor:
-			self._current_topic['title'] = data
-			self._topic_list.append(self._current_topic)
-			self._current_topic = {}
+			self._current_topic['title'] = ' '.join([self._current_topic['title'], data])
 
 	def handle_endtag(self, tag):
 		if tag == 'a' and self._in_topic_anchor:
 			self._in_topic_anchor = False
+			self._topic_list.append(self._current_topic)
+			self._current_topic = {
+				'title': '',
+				'url': '',
+				'post_id': None
+			}
 		elif tag == 'td' and self._in_topic_td:
 			self._in_topic_td = False
 
@@ -155,11 +159,11 @@ def is_topic_content_match(topic_url):
 		return False
 
 def get_new_topic_list(topic_list, board_url):
-	sorted_topic_list = sorted(topic_list, key=itemgetter('id'))
+	sorted_topic_list = sorted(topic_list, key=itemgetter('post_id'))
 	new_topic_list = []
 
 	for topic_index in range(0, len(sorted_topic_list)):
-		topic_id = sorted_topic_list[topic_index]['id']
+		topic_id = sorted_topic_list[topic_index]['post_id']
 		if  topic_id > settings.CONFIG['latest_topic_id'][board_url]:
 			new_topic_list.append(sorted_topic_list[topic_index])
 			settings.CONFIG['latest_topic_id'][board_url] = topic_id
