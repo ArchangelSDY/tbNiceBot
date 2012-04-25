@@ -52,7 +52,7 @@ class TestTbBot(unittest.TestCase):
 		result = tbNiceBot.get_html(url)
 		self.assertIsNotNone(result)
 
-	def test_get_top`ic_list(self):
+	def test_get_topic_list(self):
 		board_url = 'http://tieba.baidu.com/f?kw=%D2%B9%C3%F7%C7%B0%B5%C4%C1%F0%C1%A7%C9%AB'
 		topic_list = tbNiceBot.get_topic_list(board_url)
 		self.assertIsNotNone(topic_list)
@@ -69,7 +69,7 @@ class TestTbBot(unittest.TestCase):
 
 	def test_admin_login(self):
 		for monitor_info in settings.MONITOR_INFOS:
-			admin = tbNiceBot.Admin.login(monitor_info['login_username'].decode('utf8'), monitor_info['login_password'].decode('utf8'), monitor_info['board_url'])
+			admin = tbNiceBot.Admin.login(monitor_info['login_username'], monitor_info['login_password'], monitor_info['board_url'])
 			with open(tbNiceBot.Admin.COOKIE_PATH, 'r') as cookie_file:
 				cookie = cookie_file.read()
 				bduss_regex = re.compile('BDUSS\s+([0-9a-zA-Z\-]+)')
